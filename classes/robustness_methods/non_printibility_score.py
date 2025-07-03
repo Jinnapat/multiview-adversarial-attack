@@ -1,4 +1,4 @@
-import torch
+from torch import abs, float32, tensor
 
 nps_palette = [
     [26, 24, 52],
@@ -33,13 +33,9 @@ nps_palette = [
     [216, 89, 68]
 ]
 
-palette = torch.tensor(nps_palette, dtype=torch.float32, device="cuda").view(1, 1, 3, 1, 1, 30) / 255.0
+palette = tensor(nps_palette, dtype=float32).view(1, 3, 1, 1, 30) / 255.0
 
 def nps_loss_function(images, palette=palette):
-    
-
-
-
-
-
-
+    images = images.unsqueeze(dim=4)
+    pixel_wise_nps = abs(images - palette).min(dim=4).values
+    return pixel_wise_nps.sum() / images.shape[0]
