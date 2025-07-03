@@ -33,9 +33,9 @@ nps_palette = [
     [216, 89, 68]
 ]
 
-palette = tensor(nps_palette, dtype=float32).view(1, 3, 1, 1, 30) / 255.0
+palette_for_patch = tensor(nps_palette, dtype=float32, device="cuda").view(30, 1, 1, 3).permute(3, 1, 2, 0) / 255.0
 
-def nps_loss_function(images, palette=palette):
-    images = images.unsqueeze(dim=4)
-    pixel_wise_nps = abs(images - palette).min(dim=4).values
+def nps_loss_function(images, palette=palette_for_patch):
+    images = images.unsqueeze(dim=3)
+    pixel_wise_nps = abs(images - palette).min(dim=3).values
     return pixel_wise_nps.sum() / images.shape[0]

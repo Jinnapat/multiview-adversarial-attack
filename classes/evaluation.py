@@ -11,7 +11,7 @@ def evaluate(model, preprocess, dataloader, gt_class):
 
     with no_grad():
         for batch in dataloader:
-            images = batch["image"]
+            images = batch["image"].cuda()
             preds = softmax(model(preprocess(images)), dim=1)
 
             conf += preds[:, gt_class].sum().item()

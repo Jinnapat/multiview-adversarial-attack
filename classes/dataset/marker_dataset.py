@@ -1,10 +1,13 @@
-from torch.utils.data import Dataset
 import os
+import torch
 from torchvision.io import read_image
-import torch
+from torch.utils.data import Dataset
 from torchvision.transforms.functional import perspective
+
+import torchvision
+torchvision.disable_beta_transforms_warning()
+
 from torchvision.transforms.v2 import InterpolationMode
-import torch
 from kornia.utils import draw_convex_polygon
 
 class MarkerDataset(Dataset):

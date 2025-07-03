@@ -13,9 +13,9 @@ import os
 import argparse
 from classes.model_selector import get_model
 from torchvision.io import write_png
-
-from classes.robustness_methods.non_printibility_score import nps_loss_function
+from classes.robustness_methods.non_printibility_score import nps_loss_function, palette_for_patch
 from classes.robustness_methods.total_variation import tv_loss_function
+from tqdm import tqdm
 
 # parser
 parser = argparse.ArgumentParser(description="Multiview adversarial attack")
@@ -31,9 +31,7 @@ parser.add_argument("--tv_coef", type=float, default=0.01)
 parser.add_argument("--train_batch_size", type=int, default=8)
 parser.add_argument("--test_batch_size", type=int, default=10)
 parser.add_argument("--image_size", type=int, default=20)
-
 args = parser.parse_args()
-
 
 # setting
 patch_resolution = args.patch_resolution
@@ -54,7 +52,9 @@ model, preprocess = get_model(args.model)
 loss_function = CrossEntropyLoss()
 
 def start_training(scene_data_train, scene_data_eval, transform, scene_name, suffix):
-    patch = torch.rand(3, patch_resolution, patch_resolution, dtype=torch.float32)
+    gt_class = scene_data_eval["gt_class"].head(1).values[0]
+
+    patch = torch.rand(3, patch_resolution, patch_resolution, dtype=torch.float32, device="cuda").requires_grad_(True)
     optimizer = Adam([patch], lr=lr)
 
     dataset_train = MarkerDataset(dataset_prefix, scene_data_train, transform, patch=patch)
@@ -62,6 +62,9 @@ def start_training(scene_data_train, scene_data_eval, transform, scene_name, suf
 
     dataset_eval = MarkerDataset(dataset_prefix, scene_data_eval, transform, patch=patch)
     dataloader_eval = DataLoader(dataset_eval, batch_size=test_batch_size, shuffle=False)
+
+    label = torch.zeros(1, 1000, device="cuda")
+    label[0, gt_class] = 1.0
 
     conf_list = []
     top1_list = []
@@ -77,13 +80,13 @@ def start_training(scene_data_train, scene_data_eval, transform, scene_name, suf
     best_conf = conf
     best_patch = patch.detach().clone()
 
-    for _ in range(num_epochs):
+    for _ in tqdm(range(num_epochs)):
         for batch in dataloader_train:
             optimizer.zero_grad()
-            images = batch["image"]
+            images = batch["image"].cuda()
             preds = model(preprocess(images))
 
-            loss_obj = loss_function(preds)
+            loss_obj = loss_function(preds, label.repeat(images.shape[0], 1))
             loss_nps = nps_loss_function(patch)
             loss_tv = tv_loss_function(patch)
 
@@ -93,8 +96,9 @@ def start_training(scene_data_train, scene_data_eval, transform, scene_name, suf
             optimizer.step()
 
             with no_grad():
-                patch.data
-
+                dist = torch.square(patch.unsqueeze(3) - palette_for_patch).sum(dim=0)
+                picked_color = dist.min(dim=2).indices
+                patch = palette_for_patch[:, 0, 0, picked_color]
         
         conf, top1, top3, top5 = evaluate(model, preprocess, dataloader_eval, gt_class)
         conf_list.append(conf)
@@ -106,7 +110,7 @@ def start_training(scene_data_train, scene_data_eval, transform, scene_name, suf
             best_conf = conf
             best_patch = patch.detach().clone()
         
-    int_patch_image = (best_patch * 255.0).astype(torch.int8)
+    int_patch_image = (best_patch * 255.0).to(torch.uint8).cpu()
     patch_save_path = os.path.join(output_path, "patch", f"{scene_name}_{suffix}.png")
     write_png(int_patch_image, patch_save_path)
 
@@ -119,8 +123,16 @@ def start_training(scene_data_train, scene_data_eval, transform, scene_name, suf
             "top5_list": top5_list
         }, f)
 
-for scene_id in meta_df["scene_id"].unique():
+if not os.path.exists(output_path):
+    os.mkdir(output_path)
+patch_folder_path = os.path.join(output_path, "patch")
+if not os.path.exists(patch_folder_path):
+    os.mkdir(patch_folder_path)
+pickle_folder_path = os.path.join(output_path, "pickle")
+if not os.path.exists(pickle_folder_path):
+    os.mkdir(pickle_folder_path)
 
+for scene_id in meta_df["scene_id"].unique():
 
     original_only_train = meta_df[(meta_df.scene_id == scene_id) & (meta_df.original) & ~(meta_df.is_eval_set)]
     original_only_eval = meta_df[(meta_df.scene_id == scene_id) & (meta_df.original) & (meta_df.is_eval_set)]
@@ -128,13 +140,14 @@ for scene_id in meta_df["scene_id"].unique():
     with_novel_train = meta_df[(meta_df.scene_id == scene_id) & ~(meta_df.is_eval_set)]
     with_novel_eval = meta_df[(meta_df.scene_id == scene_id) & (meta_df.is_eval_set)]
     
-    gt_class = original_only_eval["gt_class"].head(1).values[0]
     scene_name = original_only_eval["scene_id"].head(1).values[0]
     
+
+
     # single view attack
     transform = RandomEot(image_size, affine_target_patch_size)
-    start_training(original_only_train, original_only_eval, transform, scene_name, "singleview_original_only")
-    start_training(with_novel_train, with_novel_eval, transform, scene_name, "singleview_with_novel")    
+    original_only_train_singleview = original_only_train.head(1)
+    start_training(original_only_train_singleview, original_only_train_singleview, transform, scene_name, "singleview_original_only")
     
     # RandomEot attack
     transform = RandomEot(image_size, affine_target_patch_size)
