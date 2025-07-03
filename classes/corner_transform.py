@@ -3,9 +3,9 @@ from torch import tensor, rand, sin, cos, float32, matmul
 def scale_and_rotate(target_patch_size):
     scaled_patch_size = (rand(1).item() * 0.2 + 0.9) * target_patch_size
     rotate_rad = (rand(1) * 2 - 1.0) * 0.3490658504
-    rotation_matrix = tensor([[cos(rotate_rad), -sin(rotate_rad)], [sin(rotate_rad), cos(rotate_rad)]], dtype=float32)
+    rotation_matrix = tensor([[cos(rotate_rad), -sin(rotate_rad)], [sin(rotate_rad), cos(rotate_rad)]], dtype=float32, device="cuda")
 
-    corners = tensor([[-0.5, -0.5], [0.5, -0.5], [0.5, 0.5], [-0.5, 0.5]], dtype=float32) * scaled_patch_size
+    corners = tensor([[-0.5, -0.5], [0.5, -0.5], [0.5, 0.5], [-0.5, 0.5]], dtype=float32, device="cuda") * scaled_patch_size
     corners = matmul(rotation_matrix, corners.T).T
     return corners
 
@@ -20,7 +20,7 @@ class RandomEot(object):
 
     def __call__(self, _):
        corners = scale_and_rotate(self.target_patch_size)
-       corners += rand(1, 2) * self.translate_range + self.min_translate
+       corners += rand(1, 2, device="cuda") * self.translate_range + self.min_translate
        return corners
 
 class ObjectAwareEot(object):
@@ -33,11 +33,11 @@ class ObjectAwareEot(object):
         max_x = sample[:, 0].max()
         max_y = sample[:, 1].max()
 
-        range_translate = tensor([[max_x - min_x, max_y - min_y]], dtype=float32)
-        min_translate = tensor([[min_x, min_y]], dtype=float32)
+        range_translate = tensor([[max_x - min_x, max_y - min_y]], dtype=float32, device="cuda")
+        min_translate = tensor([[min_x, min_y]], dtype=float32, device="cuda")
 
         corners = scale_and_rotate(self.patch_size)
-        corners += rand(1, 2) * range_translate + min_translate
+        corners += rand(1, 2, device="cuda") * range_translate + min_translate
 
         return corners
     

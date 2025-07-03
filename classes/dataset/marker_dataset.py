@@ -10,26 +10,35 @@ torchvision.disable_beta_transforms_warning()
 from torchvision.transforms.v2 import InterpolationMode
 from kornia.utils import draw_convex_polygon
 
+mask_color = torch.tensor([1.0], device="cuda")
+
 class MarkerDataset(Dataset):
-    def __init__(self, dataset_prefix, meta_df, corner_transform, patch):
+    def __init__(self, dataset_prefix, meta_df, corner_transform, image_size, patch):
         self.dataset_prefix = dataset_prefix
         self.meta_df = meta_df
         self.corner_transform = corner_transform
         self.patch = patch
-        self.patch_starting_points = [[0, 0], [20, 0], [20, 20], [0, 20]]
+        self.image_size = image_size
+
+        patch_size = patch.shape[1]
+        self.patch_starting_points = [[0, 0], [patch_size, 0], [patch_size, patch_size], [0, patch_size]]
+
+        self.full_patch = torch.zeros(3, image_size, image_size, dtype=torch.float32, device="cuda")
+        self.images = []
+
+        for image_name in meta_df["image_name"]:
+            image_path = os.path.join(self.dataset_prefix, image_name)
+            image = read_image(image_path).cuda() / 255.0
+            self.images.append(image)
 
     def __len__(self):
         return self.meta_df.shape[0]
 
     def __getitem__(self, idx):
-        image_path = os.path.join(self.dataset_prefix, self.meta_df["image_name"].iloc[idx])
-        image = read_image(image_path) / 255.0
-        corners = self.corner_transform(torch.tensor(self.meta_df.iloc[idx, 4:12].values.astype(int).reshape(4, 2)))
-        
-        image_height = image.shape[1]
-        image_width = image.shape[2]
+        image = self.images[idx]
+        corners = self.corner_transform(torch.tensor(self.meta_df.iloc[idx, 4:12].values.astype(int).reshape(4, 2), device="cuda"))
 
-        full_patch = torch.zeros(3, image_height, image_width, dtype=torch.float32)
+        full_patch = self.full_patch.clone()
         full_patch[:, :self.patch.shape[1], :self.patch.shape[2]] = self.patch
 
         transformed_patch = perspective(
@@ -39,7 +48,7 @@ class MarkerDataset(Dataset):
             interpolation=InterpolationMode.BILINEAR
         )
 
-        mask = draw_convex_polygon(torch.zeros(1, 3, image_height, image_width, dtype=torch.float32), corners.unsqueeze(0), torch.tensor([1.0]))
+        mask = draw_convex_polygon(torch.zeros(1, 3, self.image_size, self.image_size, dtype=torch.float32, device="cuda"), corners.unsqueeze(0), mask_color)
         image = transformed_patch * mask + image * (1.0 - mask)
 
         sample = {

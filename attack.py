@@ -28,8 +28,8 @@ parser.add_argument("--lr", type=float, default=0.001)
 parser.add_argument("--num_epochs", type=int, default=500)
 parser.add_argument("--nps_coef", type=float, default=0.1)
 parser.add_argument("--tv_coef", type=float, default=0.01)
-parser.add_argument("--train_batch_size", type=int, default=8)
-parser.add_argument("--test_batch_size", type=int, default=10)
+parser.add_argument("--train_batch_size", type=int, default=10)
+parser.add_argument("--test_batch_size", type=int, default=40)
 parser.add_argument("--image_size", type=int, default=20)
 args = parser.parse_args()
 
@@ -45,6 +45,7 @@ lr = args.lr
 nps_coef = args.nps_coef
 tv_coef = args.tv_coef
 output_path = args.output_path
+image_size = 720
 
 meta_df = pd.read_csv(args.meta_file)
 
@@ -57,10 +58,10 @@ def start_training(scene_data_train, scene_data_eval, transform, scene_name, suf
     patch = torch.rand(3, patch_resolution, patch_resolution, dtype=torch.float32, device="cuda").requires_grad_(True)
     optimizer = Adam([patch], lr=lr)
 
-    dataset_train = MarkerDataset(dataset_prefix, scene_data_train, transform, patch=patch)
+    dataset_train = MarkerDataset(dataset_prefix, scene_data_train, transform, image_size, patch=patch)
     dataloader_train = DataLoader(dataset_train, batch_size=train_batch_size, shuffle=True)
 
-    dataset_eval = MarkerDataset(dataset_prefix, scene_data_eval, transform, patch=patch)
+    dataset_eval = MarkerDataset(dataset_prefix, scene_data_eval, transform, image_size, patch=patch)
     dataloader_eval = DataLoader(dataset_eval, batch_size=test_batch_size, shuffle=False)
 
     label = torch.zeros(1, 1000, device="cuda")
@@ -83,7 +84,7 @@ def start_training(scene_data_train, scene_data_eval, transform, scene_name, suf
     for _ in tqdm(range(num_epochs)):
         for batch in dataloader_train:
             optimizer.zero_grad()
-            images = batch["image"].cuda()
+            images = batch["image"]
             preds = model(preprocess(images))
 
             loss_obj = loss_function(preds, label.repeat(images.shape[0], 1))
@@ -141,8 +142,6 @@ for scene_id in meta_df["scene_id"].unique():
     with_novel_eval = meta_df[(meta_df.scene_id == scene_id) & (meta_df.is_eval_set)]
     
     scene_name = original_only_eval["scene_id"].head(1).values[0]
-    
-
 
     # single view attack
     transform = RandomEot(image_size, affine_target_patch_size)
