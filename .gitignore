@@ -3,3 +3,5 @@ venv
 result*
 meta*
 dataset
+test_*
+.~lock*
