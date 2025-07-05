@@ -30,12 +30,12 @@ parser.add_argument("--nps_coef", type=float, default=0.1)
 parser.add_argument("--tv_coef", type=float, default=0.01)
 parser.add_argument("--train_batch_size", type=int, default=10)
 parser.add_argument("--test_batch_size", type=int, default=40)
-parser.add_argument("--image_size", type=int, default=20)
+parser.add_argument("--image_size", type=int, default=720)
 args = parser.parse_args()
 
 # setting
 patch_resolution = args.patch_resolution
-image_size = args.image_size
+image_size = int(args.image_size)
 train_batch_size = args.train_batch_size
 test_batch_size = args.test_batch_size
 dataset_prefix = args.dataset_prefix
@@ -45,7 +45,6 @@ lr = args.lr
 nps_coef = args.nps_coef
 tv_coef = args.tv_coef
 output_path = args.output_path
-image_size = 720
 
 meta_df = pd.read_csv(args.meta_file)
 
