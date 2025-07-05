@@ -20,6 +20,8 @@ class MarkerDataset(Dataset):
         self.patch = patch
         self.image_size = image_size
 
+        self.corner_cols = ["x0", "y0", "x1", "y1", "x2", "y2", "x3", "y3"]
+
         patch_size = patch.shape[1]
         self.patch_starting_points = [[0, 0], [patch_size, 0], [patch_size, patch_size], [0, patch_size]]
 
@@ -36,7 +38,9 @@ class MarkerDataset(Dataset):
 
     def __getitem__(self, idx):
         image = self.images[idx]
-        corners = self.corner_transform(torch.tensor(self.meta_df.iloc[idx, 4:12].values.astype(int).reshape(4, 2), device="cuda"))
+
+        corners_data = self.meta_df.loc[idx, self.corner_cols].values.astype(int).reshape(4, 2)
+        corners = self.corner_transform(torch.tensor(corners_data, device="cuda"))
 
         full_patch = self.full_patch.clone()
         full_patch[:, :self.patch.shape[1], :self.patch.shape[2]] = self.patch

@@ -25,8 +25,8 @@ parser.add_argument("--model", type=str, required=True)
 parser.add_argument("--output_path", type=str, required=True)
 parser.add_argument("--patch_resolution", type=int, default=20)
 parser.add_argument("--lr", type=float, default=0.001)
-parser.add_argument("--num_epochs", type=int, default=500)
-parser.add_argument("--nps_coef", type=float, default=0.1)
+parser.add_argument("--num_epochs", type=int, default=600)
+parser.add_argument("--nps_coef", type=float, default=0.01)
 parser.add_argument("--tv_coef", type=float, default=0.01)
 parser.add_argument("--train_batch_size", type=int, default=10)
 parser.add_argument("--test_batch_size", type=int, default=40)
@@ -96,9 +96,7 @@ def start_training(scene_data_train, scene_data_eval, transform, scene_name, suf
             optimizer.step()
 
             with no_grad():
-                dist = torch.square(patch.unsqueeze(3) - palette_for_patch).sum(dim=0)
-                picked_color = dist.min(dim=2).indices
-                patch = palette_for_patch[:, 0, 0, picked_color]
+                patch.data = torch.clamp(patch.data, 0.0, 1.0)
         
         conf, top1, top3, top5 = evaluate(model, preprocess, dataloader_eval, gt_class)
         conf_list.append(conf)
